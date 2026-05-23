@@ -1,0 +1,394 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>3D Molecular Visualizer — 100 Molecules | Py3Dmol Mini Project</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.6.0/jquery.min.js"></script>
+<script src="https://3dmol.org/build/3Dmol-min.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:Arial,sans-serif;background:#f5f5f0;color:#111;height:100vh;display:flex;flex-direction:column}
+#header{padding:12px 16px;background:#fff;border-bottom:1px solid #ddd;display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+h1{font-size:16px;font-weight:600}
+#search{flex:1;min-width:200px;padding:6px 12px;border:1px solid #ccc;border-radius:8px;font-size:13px;background:#f8f8f3}
+#category-bar{display:flex;gap:6px;flex-wrap:wrap;padding:8px 16px;background:#f8f8f3;border-bottom:1px solid #ddd}
+.cat-btn{padding:4px 12px;border:1px solid #ccc;border-radius:20px;font-size:12px;cursor:pointer;background:#fff;transition:all 0.15s}
+.cat-btn.active,.cat-btn:hover{background:#7F77DD;color:#fff;border-color:#7F77DD}
+#main{display:flex;flex:1;overflow:hidden}
+#mol-list{width:240px;overflow-y:auto;border-right:1px solid #ddd;background:#fff}
+.mol-item{padding:10px 14px;cursor:pointer;border-bottom:1px solid #eee;transition:background 0.1s}
+.mol-item:hover,.mol-item.selected{background:#EEEDFE}
+.mol-item .mol-name{font-size:13px;font-weight:600}
+.mol-item .mol-formula{font-size:11px;color:#666;margin-top:2px}
+.mol-item .mol-tag{font-size:10px;padding:2px 7px;border-radius:10px;display:inline-block;margin-top:3px;font-weight:600}
+#viewer-panel{flex:1;display:flex;flex-direction:column;overflow:hidden}
+#viewer-container{flex:1;position:relative;background:#000}
+#viewer{width:100%;height:100%}
+#controls{display:flex;gap:8px;padding:8px 12px;background:#f8f8f3;border-top:1px solid #ddd;flex-wrap:wrap;align-items:center}
+.ctrl-btn{padding:5px 12px;border:1px solid #ccc;border-radius:6px;font-size:12px;cursor:pointer;background:#fff;transition:all 0.15s}
+.ctrl-btn:hover{background:#EEEDFE;border-color:#7F77DD}
+.ctrl-btn.active{background:#7F77DD;color:#fff;border-color:#7F77DD}
+#info-panel{width:280px;overflow-y:auto;background:#fff;border-left:1px solid #ddd;padding:14px;font-size:13px}
+#info-panel h2{font-size:15px;font-weight:600;margin-bottom:10px}
+.info-row{display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid #eee}
+.info-label{color:#666;font-size:12px}
+.info-val{font-weight:600;font-size:12px;text-align:right;max-width:150px;word-break:break-all}
+.prop-section{margin-top:12px}
+.prop-section h3{font-size:12px;font-weight:600;color:#534AB7;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px}
+.badge{display:inline-block;padding:2px 8px;border-radius:10px;font-size:11px;margin:2px;font-weight:600}
+#mol-count{font-size:12px;color:#666;padding:4px 14px;background:#f8f8f3;border-bottom:1px solid #ddd}
+#loading-overlay{position:absolute;inset:0;background:#111;display:flex;align-items:center;justify-content:center;color:#fff;font-size:14px;z-index:10;flex-direction:column;gap:8px}
+#spinner{width:32px;height:32px;border:3px solid #444;border-top-color:#7F77DD;border-radius:50%;animation:spin 0.8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+#error-msg{color:#E24B4A;font-size:12px;margin-top:6px;display:none}
+.smiles-code{font-family:monospace;font-size:10px;background:#f8f8f3;padding:4px 6px;border-radius:4px;word-break:break-all;margin-top:4px;color:#666}
+</style>
+</head>
+<body>
+<div id="header">
+  <h1>🔬 3D Molecular Visualizer — 100 Molecules | Py3Dmol Mini Project</h1>
+  <input id="search" type="text" placeholder="Search molecules by name, formula, tag..." oninput="filterMols()"/>
+  <span id="total-count" style="font-size:12px;color:#666"></span>
+</div>
+<div id="category-bar"></div>
+<div id="main">
+  <div style="display:flex;flex-direction:column;width:240px;border-right:1px solid #ddd">
+    <div id="mol-count"></div>
+    <div id="mol-list"></div>
+  </div>
+  <div id="viewer-panel">
+    <div id="viewer-container">
+      <div id="viewer"></div>
+      <div id="loading-overlay">
+        <div id="spinner"></div>
+        <span id="loading-text">Initializing 3D viewer...</span>
+        <span id="error-msg"></span>
+      </div>
+    </div>
+    <div id="controls">
+      <span style="font-size:12px;color:#666;font-weight:600">Style:</span>
+      <button class="ctrl-btn active" onclick="setStyle('stick')" id="btn-stick">Stick</button>
+      <button class="ctrl-btn" onclick="setStyle('sphere')" id="btn-sphere">Sphere</button>
+      <button class="ctrl-btn" onclick="setStyle('cartoon')" id="btn-cartoon">Cartoon</button>
+      <button class="ctrl-btn" onclick="setStyle('line')" id="btn-line">Line</button>
+      <button class="ctrl-btn" onclick="setStyle('cross')" id="btn-cross">Cross</button>
+      <span style="font-size:12px;color:#666;font-weight:600;margin-left:6px">Background:</span>
+      <button class="ctrl-btn active" onclick="setBG('black')" id="btn-bg-black">Dark</button>
+      <button class="ctrl-btn" onclick="setBG('white')" id="btn-bg-white">Light</button>
+      <button class="ctrl-btn" onclick="setBG('grey')" id="btn-bg-grey">Grey</button>
+      <button class="ctrl-btn" onclick="toggleSpin()" id="btn-spin" style="margin-left:auto">⟳ Auto Spin</button>
+    </div>
+  </div>
+  <div id="info-panel">
+    <h2 id="mol-title">Select a molecule</h2>
+    <div id="mol-info"><p style="color:#999;font-size:12px;margin-top:8px">Click any molecule from the list to view its 3D structure and properties.</p></div>
+  </div>
+</div>
+
+<script>
+const MOLECULES = [
+  // Original 91 Molecules[cite: 1]
+  {name:"Water",formula:"H₂O",smiles:"O",mw:18.02,cat:"Basic",color:"#B5D4F4",tags:["Polar","Solvent"],bp:"100°C",mp:"0°C",density:"1.0 g/mL",chirals:0,rings:0,hbond_d:2,hbond_a:1,desc:"Universal solvent, essential for life",iupac:"oxidane"},
+  {name:"Methane",formula:"CH₄",smiles:"C",mw:16.04,cat:"Basic",color:"#D3D1C7",tags:["Nonpolar","Gas","Alkane"],bp:"-161°C",mp:"-182°C",density:"0.657 g/L",chirals:0,rings:0,hbond_d:0,hbond_a:0,desc:"Simplest alkane, greenhouse gas",iupac:"methane"},
+  {name:"Ethanol",formula:"C₂H₅OH",smiles:"CCO",mw:46.07,cat:"Alcohols",color:"#9FE1CB",tags:["Alcohol","Polar","Solvent"],bp:"78.4°C",mp:"-114°C",density:"0.789 g/mL",chirals:0,rings:0,hbond_d:1,hbond_a:1,desc:"Common alcohol found in beverages",iupac:"ethanol"},
+  {name:"Glucose",formula:"C₆H₁₂O₆",smiles:"OC[C@H]1OC(O)[C@H](O)[C@@H](O)[C@@H]1O",mw:180.16,cat:"Biomolecules",color:"#FAC775",tags:["Sugar","Chiral","Ring"],bp:"decomp",mp:"146°C",density:"1.54 g/mL",chirals:4,rings:1,hbond_d:5,hbond_a:6,desc:"Primary energy source for cells",iupac:"D-glucose"},
+  {name:"Caffeine",formula:"C₈H₁₀N₄O₂",smiles:"Cn1cnc2c1c(=O)n(c(=O)n2C)C",mw:194.19,cat:"Drugs",color:"#F5C4B3",tags:["Alkaloid","Ring","Drug"],bp:"178°C",mp:"235°C",density:"1.23 g/mL",chirals:0,rings:2,hbond_d:0,hbond_a:3,desc:"Most widely consumed psychoactive drug",iupac:"1,3,7-trimethylxanthine"},
+  {name:"Aspirin",formula:"C₉H₈O₄",smiles:"CC(=O)Oc1ccccc1C(=O)O",mw:180.16,cat:"Drugs",color:"#F5C4B3",tags:["Analgesic","Ring","Drug"],bp:"140°C",mp:"135°C",density:"1.40 g/mL",chirals:0,rings:1,hbond_d:1,hbond_a:4,desc:"Pain reliever and anti-inflammatory",iupac:"2-acetoxybenzoic acid"},
+  {name:"Benzene",formula:"C₆H₆",smiles:"c1ccccc1",mw:78.11,cat:"Aromatics",color:"#F4C0D1",tags:["Aromatic","Ring","Carcinogen"],bp:"80.1°C",mp:"5.5°C",density:"0.879 g/mL",chirals:0,rings:1,hbond_d:0,hbond_a:0,desc:"Fundamental aromatic compound",iupac:"benzene"},
+  {name:"Cholesterol",formula:"C₂₇H₄₆O",smiles:"[C@@H]1(CC[C@H]2[C@@]1(CC[C@H]3[C@H]2CC=C4[C@@]3(CC[C@@H](C4)O)C)C)CCCC(C)C",mw:386.65,cat:"Lipids",color:"#C0DD97",tags:["Steroid","Chiral","Ring","Lipid"],bp:"360°C",mp:"148°C",density:"1.07 g/mL",chirals:8,rings:4,hbond_d:1,hbond_a:1,desc:"Essential steroid in cell membranes",iupac:"cholest-5-en-3β-ol"},
+  {name:"Penicillin G",formula:"C₁₆H₁₈N₂O₄S",smiles:"[H][C@@]12SC(C)(C)[C@@H](N1C(=O)[C@H]2NC(=O)Cc1ccccc1)C(=O)O",mw:334.39,cat:"Drugs",color:"#F5C4B3",tags:["Antibiotic","Chiral","Drug","Ring"],bp:"decomp",mp:"214°C",density:"1.41 g/mL",chirals:3,rings:3,hbond_d:2,hbond_a:6,desc:"First antibiotic discovered by Fleming",iupac:"benzylpenicillin"},
+  {name:"Dopamine",formula:"C₈H₁₁NO₂",smiles:"NCCc1ccc(O)c(O)c1",mw:153.18,cat:"Neurotransmitters",color:"#CECBF6",tags:["Neurotransmitter","Ring","Amine"],bp:"decomp",mp:"128°C",density:"1.26 g/mL",chirals:0,rings:1,hbond_d:3,hbond_a:3,desc:"Reward and pleasure neurotransmitter",iupac:"4-(2-aminoethyl)benzene-1,2-diol"},
+  {name:"Serotonin",formula:"C₁₀H₁₂N₂O",smiles:"NCCc1c[nH]c2ccc(O)cc12",mw:176.21,cat:"Neurotransmitters",color:"#CECBF6",tags:["Neurotransmitter","Ring","Indole"],bp:"416°C",mp:"167°C",density:"1.3 g/mL",chirals:0,rings:2,hbond_d:3,hbond_a:2,desc:"Mood-regulating neurotransmitter",iupac:"3-(2-aminoethyl)-1H-indol-5-ol"},
+  {name:"Adenine",formula:"C₅H₅N₅",smiles:"Nc1ncnc2[nH]cnc12",mw:135.13,cat:"Nucleobases",color:"#B5D4F4",tags:["Nucleobase","Ring","DNA/RNA"],bp:"364°C",mp:"360°C",density:"1.6 g/mL",chirals:0,rings:2,hbond_d:2,hbond_a:4,desc:"Purine base in DNA and RNA",iupac:"7H-purin-6-amine"},
+  {name:"Guanine",formula:"C₅H₅N₅O",smiles:"Nc1nc2[nH]cnc2c(=O)[nH]1",mw:151.13,cat:"Nucleobases",color:"#B5D4F4",tags:["Nucleobase","Ring","DNA/RNA"],bp:"decomp",mp:"360°C",density:"1.87 g/mL",chirals:0,rings:2,hbond_d:3,hbond_a:5,desc:"Purine base — pairs with cytosine",iupac:"2-amino-1,9-dihydro-6H-purin-6-one"},
+  {name:"Cytosine",formula:"C₄H₅N₃O",smiles:"Nc1cc[nH]c(=O)n1",mw:111.10,cat:"Nucleobases",color:"#B5D4F4",tags:["Nucleobase","Ring","DNA/RNA"],bp:"decomp",mp:"320°C",density:"1.55 g/mL",chirals:0,rings:1,hbond_d:2,hbond_a:3,desc:"Pyrimidine base — pairs with guanine",iupac:"4-aminopyrimidin-2(1H)-one"},
+  {name:"Thymine",formula:"C₅H₆N₂O₂",smiles:"Cc1c[nH]c(=O)[nH]c1=O",mw:126.11,cat:"Nucleobases",color:"#B5D4F4",tags:["Nucleobase","Ring","DNA only"],bp:"decomp",mp:"316°C",density:"1.6 g/mL",chirals:0,rings:1,hbond_d:2,hbond_a:4,desc:"Pyrimidine base found only in DNA",iupac:"5-methylpyrimidine-2,4(1H,3H)-dione"},
+  {name:"Uracil",formula:"C₄H₄N₂O₂",smiles:"O=c1cc[nH]c(=O)[nH]1",mw:112.09,cat:"Nucleobases",color:"#B5D4F4",tags:["Nucleobase","Ring","RNA only"],bp:"decomp",mp:"335°C",density:"1.32 g/mL",chirals:0,rings:1,hbond_d:2,hbond_a:4,desc:"Pyrimidine base found only in RNA",iupac:"pyrimidine-2,4(1H,3H)-dione"},
+  {name:"Sucrose",formula:"C₁₂H₂₂O₁₁",smiles:"OC[C@H]1O[C@@](CO)(O[C@H]2O[C@H](CO)[C@@H](O)[C@H](O)[C@H]2O)[C@@H](O)[C@@H]1O",mw:342.30,cat:"Biomolecules",color:"#FAC775",tags:["Disaccharide","Chiral","Sugar"],bp:"decomp",mp:"186°C",density:"1.59 g/mL",chirals:9,rings:2,hbond_d:8,hbond_a:11,desc:"Table sugar — glucose + fructose",iupac:"alpha-D-glucopyranosyl-(1-2)-beta-D-fructofuranoside"},
+  {name:"Fructose",formula:"C₆H₁₂O₆",smiles:"OC[C@@H]1OC(O)(CO)[C@@H](O)[C@@H]1O",mw:180.16,cat:"Biomolecules",color:"#FAC775",tags:["Sugar","Chiral","Ring"],bp:"decomp",mp:"103°C",density:"1.69 g/mL",chirals:3,rings:1,hbond_d:5,hbond_a:6,desc:"Fruit sugar, sweeter than glucose",iupac:"D-fructose"},
+  {name:"Alanine",formula:"C₃H₇NO₂",smiles:"C[C@@H](N)C(=O)O",mw:89.09,cat:"Amino Acids",color:"#9FE1CB",tags:["Amino Acid","Chiral"],bp:"decomp",mp:"258°C",density:"1.43 g/mL",chirals:1,rings:0,hbond_d:2,hbond_a:3,desc:"Simplest chiral amino acid",iupac:"(S)-2-aminopropanoic acid"},
+  {name:"Phenylalanine",formula:"C₉H₁₁NO₂",smiles:"N[C@@H](Cc1ccccc1)C(=O)O",mw:165.19,cat:"Amino Acids",color:"#9FE1CB",tags:["Amino Acid","Chiral","Ring"],bp:"decomp",mp:"283°C",density:"1.29 g/mL",chirals:1,rings:1,hbond_d:2,hbond_a:3,desc:"Essential aromatic amino acid",iupac:"(S)-2-amino-3-phenylpropanoic acid"},
+  {name:"Tryptophan",formula:"C₁₁H₁₂N₂O₂",smiles:"N[C@@H](Cc1c[nH]c2ccccc12)C(=O)O",mw:204.23,cat:"Amino Acids",color:"#9FE1CB",tags:["Amino Acid","Chiral","Ring","Indole"],bp:"decomp",mp:"289°C",density:"1.34 g/mL",chirals:1,rings:2,hbond_d:3,hbond_a:3,desc:"Precursor to serotonin and melatonin",iupac:"(S)-2-amino-3-(1H-indol-3-yl)propanoic acid"},
+  {name:"Cysteine",formula:"C₃H₇NO₂S",smiles:"N[C@@H](CS)C(=O)O",mw:121.16,cat:"Amino Acids",color:"#9FE1CB",tags:["Amino Acid","Chiral","Sulfur"],bp:"decomp",mp:"178°C",density:"1.3 g/mL",chirals:1,rings:0,hbond_d:3,hbond_a:3,desc:"Amino acid forming disulfide bridges",iupac:"(R)-2-amino-3-mercaptopropanoic acid"},
+  {name:"Morphine",formula:"C₁₇H₁₉NO₃",smiles:"[H][C@@]12Oc3c(O)ccc4c3[C@]1(CCN(C)C2)CC4",mw:285.34,cat:"Drugs",color:"#F5C4B3",tags:["Opioid","Chiral","Ring","Drug"],bp:"190°C",mp:"255°C",density:"1.32 g/mL",chirals:5,rings:5,hbond_d:2,hbond_a:4,desc:"Powerful pain-relieving opioid alkaloid",iupac:"morphine"},
+  {name:"Ibuprofen",formula:"C₁₃H₁₈O₂",smiles:"CC(C)Cc1ccc(cc1)[C@@H](C)C(=O)O",mw:206.28,cat:"Drugs",color:"#F5C4B3",tags:["NSAID","Chiral","Ring","Drug"],bp:"157°C",mp:"76°C",density:"1.03 g/mL",chirals:1,rings:1,hbond_d:1,hbond_a:2,desc:"Common anti-inflammatory painkiller",iupac:"(RS)-2-(4-(2-methylpropyl)phenyl)propanoic acid"},
+  {name:"Paracetamol",formula:"C₈H₉NO₂",smiles:"CC(=O)Nc1ccc(O)cc1",mw:151.16,cat:"Drugs",color:"#F5C4B3",tags:["Analgesic","Ring","Drug"],bp:"168°C",mp:"169°C",density:"1.29 g/mL",chirals:0,rings:1,hbond_d:2,hbond_a:3,desc:"Widely used OTC pain and fever reliever",iupac:"N-(4-hydroxyphenyl)acetamide"},
+  {name:"Testosterone",formula:"C₁₉H₂₈O₂",smiles:"[H][C@@]12CC[C@H]3[C@@]([H])(CC[C@@H]3O)[C@@]1([H])CCC2=O",mw:288.42,cat:"Hormones",color:"#F4C0D1",tags:["Hormone","Steroid","Chiral"],bp:"decomp",mp:"155°C",density:"1.15 g/mL",chirals:6,rings:4,hbond_d:1,hbond_a:2,desc:"Primary male sex hormone",iupac:"(8R,9S,10R,13S,14S,17S)-17-hydroxy-10,13-dimethyl steroid"},
+  {name:"Estradiol",formula:"C₁₈H₂₄O₂",smiles:"[H][C@@]12CC[C@H](O)c3cc(O)ccc3[C@@]1([H])CC[C@@H]2O",mw:272.38,cat:"Hormones",color:"#F4C0D1",tags:["Hormone","Steroid","Chiral"],bp:"decomp",mp:"178°C",density:"1.23 g/mL",chirals:4,rings:4,hbond_d:2,hbond_a:2,desc:"Primary female sex hormone",iupac:"estra-1,3,5(10)-triene-3,17beta-diol"},
+  {name:"Adrenaline",formula:"C₉H₁₃NO₃",smiles:"CNC[C@@H](O)c1ccc(O)c(O)c1",mw:183.20,cat:"Hormones",color:"#F4C0D1",tags:["Hormone","Neurotransmitter","Chiral"],bp:"decomp",mp:"215°C",density:"1.28 g/mL",chirals:1,rings:1,hbond_d:4,hbond_a:4,desc:"Fight or flight hormone",iupac:"(R)-4-(1-hydroxy-2-(methylamino)ethyl)benzene-1,2-diol"},
+  {name:"Vitamin C",formula:"C₆H₈O₆",smiles:"OC[C@H](O)[C@@H]1OC(=O)C(O)=C1O",mw:176.12,cat:"Vitamins",color:"#C0DD97",tags:["Vitamin","Antioxidant","Chiral"],bp:"decomp",mp:"190°C",density:"1.65 g/mL",chirals:2,rings:1,hbond_d:4,hbond_a:6,desc:"Essential antioxidant vitamin",iupac:"(R)-3,4-dihydroxy-5-((S)-1,2-dihydroxyethyl)furan-2(5H)-one"},
+  {name:"Vitamin D3",formula:"C₂₇H₄₄O",smiles:"[C@H]1([C@@H](CCCC(C)C)C)CC[C@@H]2[C@@]1(CCC/C2=C/C=C3/CC(O)CC[C@@H]3C)C",mw:384.64,cat:"Vitamins",color:"#C0DD97",tags:["Vitamin","Steroid","Chiral"],bp:"496°C",mp:"84°C",density:"1.06 g/mL",chirals:6,rings:3,hbond_d:1,hbond_a:1,desc:"Sunshine vitamin for bone health",iupac:"cholecalciferol"},
+  {name:"Nicotine",formula:"C₁₀H₁₄N₂",smiles:"CN1CCC[C@@H]1c1cccnc1",mw:162.23,cat:"Drugs",color:"#F5C4B3",tags:["Alkaloid","Chiral","Ring","Addictive"],bp:"247°C",mp:"-79°C",density:"1.01 g/mL",chirals:1,rings:2,hbond_d:0,hbond_a:2,desc:"Addictive alkaloid in tobacco",iupac:"(S)-3-(1-methylpyrrolidin-2-yl)pyridine"},
+  {name:"THC",formula:"C₂₁H₃₀O₂",smiles:"CCCCCc1cc2c(c(c1)O)[C@@H]1CCC(=C)[C@H]1CC2",mw:314.46,cat:"Drugs",color:"#F5C4B3",tags:["Cannabinoid","Chiral","Ring","Psychoactive"],bp:"200°C",mp:"77°C",density:"1.04 g/mL",chirals:2,rings:2,hbond_d:1,hbond_a:1,desc:"Psychoactive compound in cannabis",iupac:"(-)-trans-delta9-tetrahydrocannabinol"},
+  {name:"Acetic Acid",formula:"CH₃COOH",smiles:"CC(=O)O",mw:60.05,cat:"Acids",color:"#F0997B",tags:["Carboxylic Acid","Vinegar"],bp:"118°C",mp:"16.6°C",density:"1.05 g/mL",chirals:0,rings:0,hbond_d:1,hbond_a:2,desc:"Main component of vinegar",iupac:"acetic acid"},
+  {name:"Citric Acid",formula:"C₆H₈O₇",smiles:"OC(=O)CC(O)(CC(=O)O)C(=O)O",mw:192.12,cat:"Acids",color:"#F0997B",tags:["Carboxylic Acid","Food"],bp:"310°C",mp:"153°C",density:"1.67 g/mL",chirals:0,rings:0,hbond_d:4,hbond_a:7,desc:"Natural acid in citrus fruits",iupac:"2-hydroxypropane-1,2,3-tricarboxylic acid"},
+  {name:"Lactic Acid",formula:"C₃H₆O₃",smiles:"C[C@@H](O)C(=O)O",mw:90.08,cat:"Acids",color:"#F0997B",tags:["Chiral","Carboxylic Acid","Metabolism"],bp:"122°C",mp:"18°C",density:"1.21 g/mL",chirals:1,rings:0,hbond_d:2,hbond_a:3,desc:"Produced in muscles during exercise",iupac:"(S)-2-hydroxypropanoic acid"},
+  {name:"Toluene",formula:"C₇H₈",smiles:"Cc1ccccc1",mw:92.14,cat:"Aromatics",color:"#F4C0D1",tags:["Aromatic","Solvent","Ring"],bp:"110.6°C",mp:"-93°C",density:"0.867 g/mL",chirals:0,rings:1,hbond_d:0,hbond_a:0,desc:"Common aromatic solvent",iupac:"methylbenzene"},
+  {name:"Naphthalene",formula:"C₁₀H₈",smiles:"c1ccc2ccccc2c1",mw:128.17,cat:"Aromatics",color:"#F4C0D1",tags:["Aromatic","Ring","PAH"],bp:"218°C",mp:"80°C",density:"1.14 g/mL",chirals:0,rings:2,hbond_d:0,hbond_a:0,desc:"Simplest PAH, used as mothballs",iupac:"naphthalene"},
+  {name:"Phenol",formula:"C₆H₆O",smiles:"Oc1ccccc1",mw:94.11,cat:"Aromatics",color:"#F4C0D1",tags:["Phenol","Ring","Antiseptic"],bp:"181.7°C",mp:"40.5°C",density:"1.07 g/mL",chirals:0,rings:1,hbond_d:1,hbond_a:1,desc:"First antiseptic used in surgery",iupac:"phenol"},
+  {name:"Aniline",formula:"C₆H₇N",smiles:"Nc1ccccc1",mw:93.13,cat:"Aromatics",color:"#F4C0D1",tags:["Amine","Ring","Dye precursor"],bp:"184.1°C",mp:"-6.3°C",density:"1.02 g/mL",chirals:0,rings:1,hbond_d:1,hbond_a:1,desc:"Key precursor in dye synthesis",iupac:"aniline"},
+  {name:"Styrene",formula:"C₈H₈",smiles:"C=Cc1ccccc1",mw:104.15,cat:"Aromatics",color:"#F4C0D1",tags:["Vinyl","Ring","Monomer"],bp:"145°C",mp:"-30°C",density:"0.909 g/mL",chirals:0,rings:1,hbond_d:0,hbond_a:0,desc:"Monomer for polystyrene plastic",iupac:"ethenylbenzene"},
+  {name:"Acetone",formula:"C₃H₆O",smiles:"CC(C)=O",mw:58.08,cat:"Solvents",color:"#D3D1C7",tags:["Ketone","Solvent","Polar"],bp:"56°C",mp:"-95°C",density:"0.791 g/mL",chirals:0,rings:0,hbond_d:0,hbond_a:1,desc:"Common organic solvent, nail polish remover",iupac:"propan-2-one"},
+  {name:"Chloroform",formula:"CHCl₃",smiles:"ClC(Cl)Cl",mw:119.38,cat:"Solvents",color:"#D3D1C7",tags:["Halogen","Solvent","Anesthetic"],bp:"61.2°C",mp:"-63.5°C",density:"1.49 g/mL",chirals:0,rings:0,hbond_d:0,hbond_a:0,desc:"Historic anesthetic and solvent",iupac:"trichloromethane"},
+  {name:"Diethyl Ether",formula:"C₄H₁₀O",smiles:"CCOCC",mw:74.12,cat:"Solvents",color:"#D3D1C7",tags:["Ether","Solvent","Anesthetic"],bp:"34.6°C",mp:"-116°C",density:"0.706 g/mL",chirals:0,rings:0,hbond_d:0,hbond_a:1,desc:"Classic laboratory solvent and anesthetic",iupac:"ethoxyethane"},
+  {name:"DMSO",formula:"C₂H₆OS",smiles:"CS(C)=O",mw:78.13,cat:"Solvents",color:"#D3D1C7",tags:["Sulfoxide","Solvent","Polar"],bp:"189°C",mp:"19°C",density:"1.10 g/mL",chirals:0,rings:0,hbond_d:0,hbond_a:1,desc:"Universal solvent, penetrates skin",iupac:"dimethyl sulfoxide"},
+  {name:"Propane",formula:"C₃H₈",smiles:"CCC",mw:44.10,cat:"Basic",color:"#D3D1C7",tags:["Alkane","Gas","Fuel"],bp:"-42°C",mp:"-190°C",density:"1.87 g/L",chirals:0,rings:0,hbond_d:0,hbond_a:0,desc:"Common fuel gas",iupac:"propane"},
+  {name:"Ethylene",formula:"C₂H₄",smiles:"C=C",mw:28.05,cat:"Basic",color:"#D3D1C7",tags:["Alkene","Gas","Monomer"],bp:"-104°C",mp:"-169°C",density:"1.18 g/L",chirals:0,rings:0,hbond_d:0,hbond_a:0,desc:"Plant hormone and polyethylene monomer",iupac:"ethene"},
+  {name:"Acetylene",formula:"C₂H₂",smiles:"C#C",mw:26.04,cat:"Basic",color:"#D3D1C7",tags:["Alkyne","Gas","Fuel"],bp:"-84°C",mp:"-80°C",density:"1.09 g/L",chirals:0,rings:0,hbond_d:0,hbond_a:0,desc:"Used in welding torches",iupac:"ethyne"},
+  {name:"Formaldehyde",formula:"CH₂O",smiles:"C=O",mw:30.03,cat:"Basic",color:"#D3D1C7",tags:["Aldehyde","Preservative"],bp:"-19°C",mp:"-92°C",density:"0.815 g/mL",chirals:0,rings:0,hbond_d:0,hbond_a:1,desc:"Simplest aldehyde, used in embalming",iupac:"methanal"},
+  {name:"Glycine",formula:"C₂H₅NO₂",smiles:"NCC(=O)O",mw:75.03,cat:"Amino Acids",color:"#9FE1CB",tags:["Amino Acid","Achiral"],bp:"decomp",mp:"233°C",density:"1.16 g/mL",chirals:0,rings:0,hbond_d:3,hbond_a:3,desc:"Simplest amino acid — no chiral center",iupac:"aminoacetic acid"},
+  {name:"Proline",formula:"C₅H₉NO₂",smiles:"OC(=O)[C@@H]1CCCN1",mw:115.13,cat:"Amino Acids",color:"#9FE1CB",tags:["Amino Acid","Chiral","Ring"],bp:"decomp",mp:"220°C",density:"1.35 g/mL",chirals:1,rings:1,hbond_d:2,hbond_a:3,desc:"Cyclic amino acid, disrupts alpha-helices",iupac:"(S)-pyrrolidine-2-carboxylic acid"},
+  {name:"Squalene",formula:"C₃₀H₅₀",smiles:"CC(=CCC/C(=C/CC/C(=C/CCC=C(C)CCC=C(C)C)/C)/C)C",mw:410.72,cat:"Lipids",color:"#C0DD97",tags:["Terpene","Lipid","Precursor"],bp:"421°C",mp:"-75°C",density:"0.858 g/mL",chirals:0,rings:0,hbond_d:0,hbond_a:0,desc:"Cholesterol precursor, found in shark liver",iupac:"(6E,10E,14E,18E)-2,6,10,15,19,23-hexamethyltetracosahexaene"},
+  {name:"Palmitic Acid",formula:"C₁₆H₃₂O₂",smiles:"CCCCCCCCCCCCCCCC(=O)O",mw:256.42,cat:"Lipids",color:"#C0DD97",tags:["Fatty Acid","Saturated","Lipid"],bp:"351°C",mp:"63°C",density:"0.853 g/mL",chirals:0,rings:0,hbond_d:1,hbond_a:2,desc:"Most common saturated fatty acid",iupac:"hexadecanoic acid"},
+  {name:"Oleic Acid",formula:"C₁₈H₃₄O₂",smiles:"CCCCCCCCC=CCCCCCCCC(=O)O",mw:282.46,cat:"Lipids",color:"#C0DD97",tags:["Fatty Acid","Unsaturated","Omega-9"],bp:"360°C",mp:"13°C",density:"0.895 g/mL",chirals:0,rings:0,hbond_d:1,hbond_a:2,desc:"Main component of olive oil",iupac:"(Z)-octadec-9-enoic acid"},
+  {name:"Capsaicin",formula:"C₁₈H₂₇NO₃",smiles:"COc1cc(CNC(=O)CCCC/C=C/CC(C)C)ccc1O",mw:305.41,cat:"Natural Products",color:"#EF9F27",tags:["Alkaloid","Ring","Spicy"],bp:"210°C",mp:"62°C",density:"1.06 g/mL",chirals:0,rings:1,hbond_d:2,hbond_a:4,desc:"Active component of chili peppers",iupac:"(E)-8-methyl-N-vanillylnon-6-en-amide"},
+  {name:"Resveratrol",formula:"C₁₄H₁₂O₃",smiles:"Oc1ccc(/C=C/c2cc(O)cc(O)c2)cc1",mw:228.24,cat:"Natural Products",color:"#EF9F27",tags:["Polyphenol","Ring","Antioxidant"],bp:"440°C",mp:"261°C",density:"1.37 g/mL",chirals:0,rings:2,hbond_d:3,hbond_a:3,desc:"Antioxidant in red wine and grapes",iupac:"(E)-5-(4-hydroxystyryl)benzene-1,3-diol"},
+  {name:"Quercetin",formula:"C₁₅H₁₀O₇",smiles:"O=c1c(O)c(-c2ccc(O)c(O)c2)oc2cc(O)cc(O)c12",mw:302.24,cat:"Natural Products",color:"#EF9F27",tags:["Flavonoid","Ring","Antioxidant"],bp:"decomp",mp:"316°C",density:"1.80 g/mL",chirals:0,rings:3,hbond_d:5,hbond_a:7,desc:"Powerful antioxidant flavonoid in plants",iupac:"2-(3,4-dihydroxyphenyl)-3,5,7-trihydroxy-4H-chromen-4-one"},
+  {name:"Taxol (Paclitaxel)",formula:"C₄₇H₅₁NO₁₄",smiles:"O=C(O[C@@H]1C[C@]2(O)C(=O)[C@@H](OC(=O)c3ccccc3)[C@](CC[C@H]1OC(C)=O)(C2(C)C)O)c1ccccc1",mw:853.91,cat:"Drugs",color:"#F5C4B3",tags:["Anticancer","Chiral","Complex","Drug"],bp:"decomp",mp:"216°C",density:"1.34 g/mL",chirals:11,rings:4,hbond_d:3,hbond_a:14,desc:"Chemotherapy drug from Pacific yew tree",iupac:"paclitaxel"},
+  {name:"Warfarin",formula:"C₁₉H₁₆O₄",smiles:"OC(=O)c1ccccc1/C=C(\\CC(=O)c1ccccc1)O",mw:308.33,cat:"Drugs",color:"#F5C4B3",tags:["Anticoagulant","Ring","Drug"],bp:"decomp",mp:"161°C",density:"1.32 g/mL",chirals:1,rings:2,hbond_d:1,hbond_a:4,desc:"Blood thinner — blocks vitamin K",iupac:"4-hydroxy-3-(3-oxo-1-phenylbutyl)-2H-chromen-2-one"},
+  {name:"Metformin",formula:"C₄H₁₁N₅",smiles:"CN(C)C(=N)NC(=N)N",mw:129.16,cat:"Drugs",color:"#F5C4B3",tags:["Antidiabetic","Drug","Biguanide"],bp:"decomp",mp:"222°C",density:"1.24 g/mL",chirals:0,rings:0,hbond_d:4,hbond_a:5,desc:"First-line diabetes medication",iupac:"1,1-dimethylbiguanide"},
+  {name:"Melatonin",formula:"C₁₃H₁₆N₂O₂",smiles:"COc1ccc2[nH]cc(CCNC(C)=O)c2c1",mw:232.28,cat:"Hormones",color:"#F4C0D1",tags:["Hormone","Ring","Sleep"],bp:"decomp",mp:"117°C",density:"1.17 g/mL",chirals:0,rings:2,hbond_d:2,hbond_a:3,desc:"Sleep-wake cycle hormone",iupac:"N-[2-(5-methoxy-1H-indol-3-yl)ethyl]acetamide"},
+  {name:"Cortisol",formula:"C₂₁H₃₀O₅",smiles:"[H][C@@]12CC[C@H]3[C@@]([H])(CC[C@@H]3O)[C@@]1([H])[C@H](O)C[C@@]2(O)C(=O)CO",mw:362.46,cat:"Hormones",color:"#F4C0D1",tags:["Hormone","Steroid","Chiral"],bp:"decomp",mp:"220°C",density:"1.29 g/mL",chirals:6,rings:4,hbond_d:3,hbond_a:5,desc:"Stress hormone regulating metabolism",iupac:"(8S,9S,10R,11S,13S,14S,17R)-11,17-dihydroxy-17-(2-hydroxyacetyl)-10,13-dimethyl steroid"},
+  {name:"Atropine",formula:"C₁₇H₂₃NO₃",smiles:"CN1[C@@H]2CC[C@H]1CC(C2)OC(=O)C(CO)c1ccccc1",mw:289.37,cat:"Drugs",color:"#F5C4B3",tags:["Alkaloid","Chiral","Ring","Drug"],bp:"decomp",mp:"195°C",density:"1.18 g/mL",chirals:2,rings:2,hbond_d:0,hbond_a:3,desc:"Anticholinergic drug, eye dilation",iupac:"8-methyl-8-azabicyclo[3.2.1]octan-3-yl tropate"},
+  {name:"Quinine",formula:"C₂₀H₂₄N₂O₂",smiles:"OC(c1cc2ccc(OC)cc2nc1)[C@@H]1C[C@@H]2CC[N@@]1C[C@@H]2C=C",mw:324.42,cat:"Drugs",color:"#F5C4B3",tags:["Antimalarial","Chiral","Ring","Drug"],bp:"decomp",mp:"177°C",density:"1.23 g/mL",chirals:4,rings:3,hbond_d:1,hbond_a:3,desc:"Antimalarial compound from cinchona bark",iupac:"(S)-((2R,4S,5R)-5-ethenyl-1-azabicyclo[2.2.2]octan-2-yl)(6-methoxyquinolin-4-yl)methanol"},
+  {name:"Salicylic Acid",formula:"C₇H₆O₃",smiles:"OC(=O)c1ccccc1O",mw:138.12,cat:"Acids",color:"#F0997B",tags:["Carboxylic Acid","Ring","Antiseptic"],bp:"211°C",mp:"159°C",density:"1.44 g/mL",chirals:0,rings:1,hbond_d:2,hbond_a:3,desc:"Natural compound from willow bark",iupac:"2-hydroxybenzoic acid"},
+  {name:"Benzoic Acid",formula:"C₇H₆O₂",smiles:"OC(=O)c1ccccc1",mw:122.12,cat:"Acids",color:"#F0997B",tags:["Carboxylic Acid","Ring","Preservative"],bp:"249°C",mp:"122°C",density:"1.27 g/mL",chirals:0,rings:1,hbond_d:1,hbond_a:2,desc:"Common food preservative",iupac:"benzoic acid"},
+  {name:"Urea",formula:"CH₄N₂O",smiles:"NC(N)=O",mw:60.06,cat:"Basic",color:"#D3D1C7",tags:["Amide","Nitrogen","Fertilizer"],bp:"decomp",mp:"133°C",density:"1.32 g/mL",chirals:0,rings:0,hbond_d:2,hbond_a:1,desc:"First organic compound synthesized (Wohler)",iupac:"urea"},
+  {name:"Niacin (Vit B3)",formula:"C₆H₅NO₂",smiles:"OC(=O)c1cccnc1",mw:123.11,cat:"Vitamins",color:"#C0DD97",tags:["Vitamin","Ring","B-Vitamin"],bp:"decomp",mp:"237°C",density:"1.47 g/mL",chirals:0,rings:1,hbond_d:1,hbond_a:3,desc:"Essential B vitamin for energy metabolism",iupac:"pyridine-3-carboxylic acid"},
+  {name:"Riboflavin (B2)",formula:"C₁₇H₂₀N₄O₆",smiles:"Cc1cc2nc3c(=O)[nH]c(=O)nc3n(C[C@H](O)[C@H](O)[C@H](O)CO)c2cc1C",mw:376.36,cat:"Vitamins",color:"#C0DD97",tags:["Vitamin","Chiral","Ring","B-Vitamin"],bp:"decomp",mp:"280°C",density:"1.45 g/mL",chirals:3,rings:3,hbond_d:5,hbond_a:10,desc:"Vitamin B2 — energy metabolism and antioxidant",iupac:"7,8-dimethyl-10-ribitylbenzo[g]pteridine-2,4-dione"},
+  {name:"ATP",formula:"C₁₀H₁₆N₅O₁₃P₃",smiles:"Nc1ncnc2c1ncn2[C@@H]1O[C@H](COP(=O)(O)OP(=O)(O)OP(=O)(O)O)[C@@H](O)[C@H]1O",mw:507.18,cat:"Biomolecules",color:"#FAC775",tags:["Energy","Nucleotide","Phosphate","Chiral"],bp:"decomp",mp:"n/a",density:"n/a",chirals:4,rings:2,hbond_d:8,hbond_a:16,desc:"Universal energy currency of cells",iupac:"adenosine 5'-triphosphate"},
+  {name:"Heme",formula:"C₃₄H₃₂FeN₄O₄",smiles:"Cc1ccc2c(c1CCC(=O)O)/C(=C3/N=C(/C=C4/[N-]=C(/C=C/5N=C(C(=C2[N-]3)C)C(=C5)CC(=O)O)C(=C4)CCC(=O)O)C(=C3)C)/C(=C)CC(=O)O.[Fe+2]",mw:616.49,cat:"Biomolecules",color:"#FAC775",tags:["Porphyrin","Iron","Oxygen Transport","Ring"],bp:"decomp",mp:"decomp",density:"n/a",chirals:0,rings:4,hbond_d:0,hbond_a:4,desc:"Iron-containing oxygen transport molecule in hemoglobin",iupac:"heme b"},
+  {name:"Retinol (Vit A)",formula:"C₂₀H₃₀O",smiles:"CC1=C(/C=C/C(=C/C=C/C(=C/CO)/C)/C)CCC(C1)(C)C",mw:286.45,cat:"Vitamins",color:"#C0DD97",tags:["Vitamin","Terpene","Vision"],bp:"137°C",mp:"62°C",density:"0.944 g/mL",chirals:0,rings:1,hbond_d:1,hbond_a:1,desc:"Vitamin A — essential for vision",iupac:"(all-E)-3,7-dimethyl-9-(2,6,6-trimethylcyclohex-1-en-1-yl)nona-2,6,8-trien-1-ol"},
+  {name:"Beta-Carotene",formula:"C₄₀H₅₆",smiles:"CC1=C(/C=C/C(=C/C=C/C(=C/C=C/C=C(\\C)C=C/C=C(\\C)C=C/C2=C(C)CCCC2(C)C)/C)/C)CCC1(C)C",mw:536.87,cat:"Natural Products",color:"#EF9F27",tags:["Carotenoid","Antioxidant","Orange Pigment"],bp:"decomp",mp:"181°C",density:"0.941 g/mL",chirals:0,rings:2,hbond_d:0,hbond_a:0,desc:"Orange pigment and Vitamin A precursor in carrots",iupac:"beta-carotene"},
+  {name:"Ethylene Glycol",formula:"C₂H₆O₂",smiles:"OCCO",mw:62.07,cat:"Industrial",color:"#D3D1C7",tags:["Diol","Antifreeze","Toxic"],bp:"197°C",mp:"-13°C",density:"1.11 g/mL",chirals:0,rings:0,hbond_d:2,hbond_a:2,desc:"Main component of antifreeze",iupac:"ethane-1,2-diol"},
+  {name:"Glycerol",formula:"C₃H₈O₃",smiles:"OCC(O)CO",mw:92.09,cat:"Industrial",color:"#D3D1C7",tags:["Triol","Humectant","Food"],bp:"290°C",mp:"18°C",density:"1.26 g/mL",chirals:0,rings:0,hbond_d:3,hbond_a:3,desc:"Sweet viscous liquid, backbone of fats",iupac:"propane-1,2,3-triol"},
+  {name:"Formic Acid",formula:"CH₂O₂",smiles:"OC=O",mw:46.03,cat:"Acids",color:"#F0997B",tags:["Carboxylic Acid","Insect"],bp:"100.8°C",mp:"8.4°C",density:"1.22 g/mL",chirals:0,rings:0,hbond_d:1,hbond_a:2,desc:"Found in ant venom",iupac:"methanoic acid"},
+  {name:"Pyridine",formula:"C₅H₅N",smiles:"c1ccncc1",mw:79.10,cat:"Aromatics",color:"#F4C0D1",tags:["Aromatic","Heterocyclic","Ring"],bp:"115°C",mp:"-42°C",density:"0.978 g/mL",chirals:0,rings:1,hbond_d:0,hbond_a:1,desc:"Fundamental heteroaromatic compound",iupac:"pyridine"},
+  {name:"Imidazole",formula:"C₃H₄N₂",smiles:"c1cnc[nH]1",mw:68.08,cat:"Aromatics",color:"#F4C0D1",tags:["Heterocyclic","Aromatic","Ring"],bp:"257°C",mp:"90°C",density:"1.03 g/mL",chirals:0,rings:1,hbond_d:1,hbond_a:2,desc:"Found in histidine and histamine",iupac:"1H-imidazole"},
+  {name:"Furan",formula:"C₄H₄O",smiles:"c1ccoc1",mw:68.07,cat:"Aromatics",color:"#F4C0D1",tags:["Heterocyclic","Aromatic","Ring","Oxygen"],bp:"31.4°C",mp:"-85.6°C",density:"0.936 g/mL",chirals:0,rings:1,hbond_d:0,hbond_a:1,desc:"Simplest oxygen-containing aromatic ring",iupac:"furan"},
+  {name:"Indole",formula:"C₈H₇N",smiles:"c1ccc2[nH]ccc2c1",mw:117.15,cat:"Aromatics",color:"#F4C0D1",tags:["Heterocyclic","Aromatic","Ring","Nitrogen"],bp:"254°C",mp:"52°C",density:"1.22 g/mL",chirals:0,rings:2,hbond_d:1,hbond_a:1,desc:"Aromatic heterocycle in tryptophan",iupac:"1H-indole"},
+  {name:"Succinic Acid",formula:"C₄H₆O₄",smiles:"OC(=O)CCC(=O)O",mw:118.09,cat:"Acids",color:"#F0997B",tags:["Dicarboxylic","Krebs Cycle"],bp:"235°C",mp:"185°C",density:"1.57 g/mL",chirals:0,rings:0,hbond_d:2,hbond_a:4,desc:"Key intermediate in Krebs cycle",iupac:"butanedioic acid"},
+  {name:"Pyruvic Acid",formula:"C₃H₄O₃",smiles:"CC(=O)C(=O)O",mw:88.06,cat:"Biomolecules",color:"#FAC775",tags:["Metabolism","Keto acid"],bp:"165°C",mp:"11.8°C",density:"1.25 g/mL",chirals:0,rings:0,hbond_d:1,hbond_a:3,desc:"Central metabolite linking glycolysis and Krebs cycle",iupac:"2-oxopropanoic acid"},
+  {name:"Histamine",formula:"C₅H₉N₃",smiles:"NCCc1c[nH]cn1",mw:111.15,cat:"Neurotransmitters",color:"#CECBF6",tags:["Neurotransmitter","Ring","Allergy"],bp:"209°C",mp:"84°C",density:"1.14 g/mL",chirals:0,rings:1,hbond_d:2,hbond_a:3,desc:"Triggers allergic response and inflammation",iupac:"2-(1H-imidazol-4-yl)ethan-1-amine"},
+  {name:"GABA",formula:"C₄H₉NO₂",smiles:"NCCCC(=O)O",mw:103.12,cat:"Neurotransmitters",color:"#CECBF6",tags:["Neurotransmitter","Inhibitory"],bp:"decomp",mp:"202°C",density:"1.11 g/mL",chirals:0,rings:0,hbond_d:3,hbond_a:3,desc:"Main inhibitory neurotransmitter",iupac:"4-aminobutanoic acid"},
+  {name:"Glutamate",formula:"C₅H₉NO₄",smiles:"N[C@@H](CCC(=O)O)C(=O)O",mw:147.13,cat:"Neurotransmitters",color:"#CECBF6",tags:["Neurotransmitter","Excitatory","Chiral"],bp:"decomp",mp:"247°C",density:"1.46 g/mL",chirals:1,rings:0,hbond_d:4,hbond_a:5,desc:"Main excitatory neurotransmitter",iupac:"(S)-2-aminopentanedioic acid"},
+  {name:"Creatine",formula:"C₄H₉N₃O₂",smiles:"CN(CC(=O)O)C(=N)N",mw:131.13,cat:"Biomolecules",color:"#FAC775",tags:["Muscle","Energy","Supplement"],bp:"decomp",mp:"303°C",density:"1.33 g/mL",chirals:0,rings:0,hbond_d:3,hbond_a:4,desc:"Energy buffer in muscle cells",iupac:"2-(1-methylguanidino)acetic acid"},
+  {name:"Amphetamine",formula:"C₉H₁₃N",smiles:"C[C@@H](N)Cc1ccccc1",mw:135.21,cat:"Drugs",color:"#F5C4B3",tags:["Stimulant","Chiral","Drug"],bp:"200°C",mp:"-1°C",density:"0.913 g/mL",chirals:1,rings:1,hbond_d:1,hbond_a:1,desc:"Stimulant affecting dopamine and norepinephrine",iupac:"(S)-1-phenylpropan-2-amine"},
+  {name:"Diazepam (Valium)",formula:"C₁₆H₁₃ClN₂O",smiles:"O=C1CN=C(c2ccccc2)c2cc(Cl)ccc21",mw:284.74,cat:"Drugs",color:"#F5C4B3",tags:["Benzodiazepine","Ring","Sedative","Drug"],bp:"308°C",mp:"125°C",density:"1.32 g/mL",chirals:0,rings:3,hbond_d:0,hbond_a:2,desc:"Anti-anxiety benzodiazepine sedative",iupac:"7-chloro-1-methyl-5-phenyl-1H-benzo[e][1,4]diazepin-2(3H)-one"},
+  {name:"Salbutamol",formula:"C₁₃H₂₁NO₃",smiles:"CC(C)(C)NC[C@@H](O)c1cc(CO)ccc1O",mw:239.31,cat:"Drugs",color:"#F5C4B3",tags:["Bronchodilator","Chiral","Ring","Drug"],bp:"decomp",mp:"157°C",density:"1.22 g/mL",chirals:1,rings:1,hbond_d:4,hbond_a:4,desc:"Asthma inhaler medication",iupac:"(RS)-2-(tert-butylamino)-1-(4-hydroxy-3-hydroxymethylphenyl)ethanol"},
+  {name:"Ciprofloxacin",formula:"C₁₇H₁₈FN₃O₃",smiles:"O=C(O)c1cn(C2CC2)c2cc(F)c(N3CCNCC3)cc2c1=O",mw:331.34,cat:"Drugs",color:"#F5C4B3",tags:["Antibiotic","Ring","Fluoroquinolone","Drug"],bp:"decomp",mp:"318°C",density:"1.46 g/mL",chirals:0,rings:3,hbond_d:2,hbond_a:7,desc:"Broad-spectrum fluoroquinolone antibiotic",iupac:"1-cyclopropyl-6-fluoro-4-oxo-7-piperazin-1-ylquinoline-3-carboxylic acid"},
+  {name:"Atorvastatin",formula:"C₃₃H₃₅FN₂O₅",smiles:"CC(C)c1c(-c2ccc(F)cc2)c(-c2ccccc2)c(C(=O)N[C@@H](CC(=O)O)C[C@@H](O)CC(=O)O)n1CCc1ccc(cc1)C(C)(C)C",mw:558.64,cat:"Drugs",color:"#F5C4B3",tags:["Statin","Chiral","Ring","Drug"],bp:"decomp",mp:"159°C",density:"1.22 g/mL",chirals:2,rings:3,hbond_d:3,hbond_a:7,desc:"Cholesterol-lowering statin drug (Lipitor)",iupac:"atorvastatin"},
+  {name:"Omeprazole",formula:"C₁₇H₁₉N₃O₃S",smiles:"COc1ccc2[nH]c(/C=N/Cc3ncc(OC)c(OC)c3)nc2c1",mw:345.42,cat:"Drugs",color:"#F5C4B3",tags:["PPI","Ring","Drug","Sulfur"],bp:"decomp",mp:"158°C",density:"1.35 g/mL",chirals:1,rings:2,hbond_d:1,hbond_a:6,desc:"Proton pump inhibitor for acid reflux",iupac:"(RS)-5-methoxy-2-[(4-methoxy-3,5-dimethylpyridin-2-yl)methylsulfinyl]-1H-benzimidazole"},
+  // New Engineering Polymers (92-100)
+  {name:"Polystyrene",formula:"(C₈H₈)n",smiles:"CC(c1ccccc1)CC(c1ccccc1)CC(c1ccccc1)",mw:312.45,cat:"Engineering Polymers",color:"#FAC775",tags:["Plastic","Rigid","Monomer"],bp:">300°C",mp:"240°C",density:"1.05 g/mL",chirals:3,rings:3,hbond_d:0,hbond_a:0,desc:"Common plastic used in packaging and insulation",iupac:"poly(1-phenylethene)"},
+  {name:"Polyvinyl Chloride (PVC)",formula:"(C₂H₃Cl)n",smiles:"CC(Cl)CC(Cl)CC(Cl)",mw:187.50,cat:"Engineering Polymers",color:"#FAC775",tags:["Rigid","Vinyl","Pipes"],bp:"decomp",mp:"212°C",density:"1.38 g/mL",chirals:3,rings:0,hbond_d:0,hbond_a:0,desc:"Widely used synthetic plastic polymer",iupac:"poly(1-chloroethylene)"},
+  {name:"PHBV",formula:"(C₄H₆O₂·C₅H₈O₂)n",smiles:"CC(CC(=O)OC(CC)CC(=O)O)OC(=O)C",mw:186.20,cat:"Engineering Polymers",color:"#FAC775",tags:["Bioplastic","Biodegradable"],bp:"decomp",mp:"170°C",density:"1.25 g/mL",chirals:2,rings:0,hbond_d:1,hbond_a:4,desc:"Biodegradable, non-toxic, biocompatible plastic",iupac:"poly(3-hydroxybutyrate-co-3-hydroxyvalerate)"},
+  {name:"PHBHV",formula:"(C₄H₆O₂·C₆H₁₀O₂)n",smiles:"CCCC(CC(=O)OC(CC)CC(=O)O)OC(=O)C",mw:214.26,cat:"Engineering Polymers",color:"#FAC775",tags:["Bioplastic","Elastic"],bp:"decomp",mp:"160°C",density:"1.20 g/mL",chirals:2,rings:0,hbond_d:1,hbond_a:4,desc:"Flexible biodegradable polyester",iupac:"poly(3-hydroxybutyrate-co-3-hydroxyhexanoate)"},
+  {name:"Polyphenylene Vinylene (PPV)",formula:"(C₈H₆)n",smiles:"c1ccc(cc1)/C=C/c2ccc(cc2)/C=C/c3ccc(cc3)",mw:306.41,cat:"Engineering Polymers",color:"#FAC775",tags:["Conductive","OLED"],bp:">400°C",mp:"decomp",density:"1.10 g/mL",chirals:0,rings:3,hbond_d:0,hbond_a:0,desc:"Conductive polymer used in LEDs and solar cells",iupac:"poly(p-phenylene vinylene)"},
+  {name:"Nylon 6,6",formula:"(C₁₂H₂₂N₂O₂)n",smiles:"NCCCCCCNC(=O)CCCCC(=O)N",mw:226.32,cat:"Engineering Polymers",color:"#FAC775",tags:["Fiber","Strong","Textile"],bp:"decomp",mp:"264°C",density:"1.14 g/mL",chirals:0,rings:0,hbond_d:2,hbond_a:2,desc:"High mechanical strength and thermal stability",iupac:"poly(hexamethylene adipamide)"},
+  {name:"Polyethylene Terephthalate (PET)",formula:"(C₁₀H₈O₄)n",smiles:"COC(=O)c1ccc(cc1)C(=O)OCCO",mw:192.17,cat:"Engineering Polymers",color:"#FAC775",tags:["Recyclable","Bottles"],bp:">350°C",mp:"260°C",density:"1.38 g/mL",chirals:0,rings:1,hbond_d:1,hbond_a:4,desc:"Common thermoplastic polymer resin used in bottles",iupac:"poly(ethylene terephthalate)"},
+  {name:"Polycarbonate",formula:"(C₁₆H₁₄O₃)n",smiles:"CC(C)(c1ccc(OC(=O)Oc2ccc(cc2)C(C)(C)c3ccc(O)cc3)cc1)c4ccc(O)cc4",mw:254.30,cat:"Engineering Polymers",color:"#FAC775",tags:["Durable","Impact-Resistant"],bp:"decomp",mp:"225°C",density:"1.20 g/mL",chirals:0,rings:2,hbond_d:0,hbond_a:3,desc:"Strong, tough, and often optically transparent",iupac:"poly(bisphenol A carbonate)"},
+  {name:"PTFE (Teflon)",formula:"(C₂F₄)n",smiles:"FC(F)(F)C(F)(F)C(F)(F)C(F)(F)",mw:100.02,cat:"Engineering Polymers",color:"#FAC775",tags:["Non-stick","Heat-Resistant"],bp:"decomp",mp:"327°C",density:"2.20 g/mL",chirals:0,rings:0,hbond_d:0,hbond_a:0,desc:"Solid fluorocarbon with high heat resistance",iupac:"poly(tetrafluoroethylene)"}
+];
+
+let viewer = null, currentMol = 0, currentStyle = 'stick', spinning = false, spinInterval = null;
+let currentCat = 'All', filteredMols = [...MOLECULES];
+
+function getTagStyle(tag) {
+  if(tag.includes('Chiral')) return 'background:#EEEDFE;color:#534AB7';
+  if(tag.includes('Ring')) return 'background:#E1F5EE;color:#0F6E56';
+  if(tag.includes('Drug')) return 'background:#FAECE7;color:#993C1D';
+  if(tag.includes('DNA')||tag.includes('RNA')) return 'background:#E6F1FB;color:#185FA5';
+  return 'background:#F1EFE8;color:#5F5E5A';
+}
+
+function getCats() {
+  return ['All',...new Set(MOLECULES.map(m=>m.cat))];
+}
+
+function renderCats() {
+  document.getElementById('category-bar').innerHTML = getCats().map(c=>
+    `<button class="cat-btn${c===currentCat?' active':''}" onclick="selectCat('${c}')">${c}</button>`
+  ).join('');
+}
+
+function selectCat(cat) {
+  currentCat = cat;
+  renderCats();
+  filterMols();
+}
+
+function filterMols() {
+  const q = document.getElementById('search').value.toLowerCase();
+  filteredMols = MOLECULES.filter(m=>{
+    const matchCat = currentCat==='All' || m.cat===currentCat;
+    const matchQ = !q || m.name.toLowerCase().includes(q) || m.formula.toLowerCase().includes(q) || m.tags.some(t=>t.toLowerCase().includes(q)) || (m.iupac&&m.iupac.toLowerCase().includes(q));
+    return matchCat && matchQ;
+  });
+  renderList();
+}
+
+function renderList() {
+  const list = document.getElementById('mol-list');
+  document.getElementById('mol-count').textContent = `Showing ${filteredMols.length} of ${MOLECULES.length} molecules`;
+  list.innerHTML = filteredMols.map(m=>{
+    const idx = MOLECULES.indexOf(m);
+    return `<div class="mol-item${idx===currentMol?' selected':''}" onclick="selectMol(${idx})">
+      <div class="mol-name">${m.name}</div>
+      <div class="mol-formula">${m.formula}</div>
+      <span class="mol-tag" style="background:${m.color};color:#333">${m.cat}</span>
+    </div>`;
+  }).join('');
+}
+
+function initViewer() {
+  document.getElementById('loading-text').textContent = 'Initializing 3Dmol.js viewer...';
+  try {
+    viewer = $3Dmol.createViewer(document.getElementById('viewer'),{backgroundColor:'black'});
+    document.getElementById('loading-overlay').style.display='none';
+    loadMolecule(0);
+  } catch(e) {
+    document.getElementById('loading-text').textContent = 'Error: ' + e.message;
+    document.getElementById('error-msg').style.display='block';
+    console.error('3Dmol error:',e);
+  }
+}
+
+function loadMolecule(idx) {
+  if(!viewer) return; // Fix for null reading 'clear'
+  currentMol = idx;
+  const mol = MOLECULES[idx];
+  document.getElementById('loading-overlay').style.display='flex';
+  document.getElementById('loading-text').textContent = `Loading ${mol.name}...`;
+  document.getElementById('error-msg').style.display='none';
+
+  const url = `https://cactus.nci.nih.gov/chemical/structure/${encodeURIComponent(mol.smiles)}/sdf?get3d=true`;
+  fetch(url)
+    .then(r=>{ if(!r.ok) throw new Error('NCI fetch failed'); return r.text(); })
+    .then(sdf=>renderSDF(sdf, mol))
+    .catch(()=>{
+      fetch(`https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/smiles/${encodeURIComponent(mol.smiles)}/SDF?record_type=3d`)
+        .then(r=>{ if(!r.ok) throw new Error('PubChem failed'); return r.text(); })
+        .then(sdf=>renderSDF(sdf, mol))
+        .catch(()=>renderSMILES(mol));
+    });
+}
+
+function renderSDF(sdf, mol) {
+  if(!viewer) return;
+  viewer.clear();
+  viewer.addModel(sdf,'sdf');
+  applyStyle(currentStyle);
+  viewer.zoomTo();
+  viewer.render();
+  document.getElementById('loading-overlay').style.display='none';
+  showInfo(mol);
+  renderList();
+}
+
+function renderSMILES(mol) {
+  if(!viewer) return;
+  document.getElementById('loading-text').textContent = `Using SMILES for ${mol.name}...`;
+  try {
+    viewer.clear();
+    viewer.addModel(mol.smiles,'smi');
+    applyStyle(currentStyle);
+    viewer.zoomTo();
+    viewer.render();
+    document.getElementById('loading-overlay').style.display='none';
+    showInfo(mol);
+    renderList();
+  } catch(e) {
+    document.getElementById('loading-text').textContent = 'Render failed — try another molecule';
+    document.getElementById('error-msg').textContent = e.message;
+    document.getElementById('error-msg').style.display='block';
+  }
+}
+
+function applyStyle(style) {
+  if(!viewer) return;
+  viewer.setStyle({});
+  if(style==='stick') viewer.setStyle({},{stick:{radius:0.15},sphere:{scale:0.3}});
+  else if(style==='sphere') viewer.setStyle({},{sphere:{scale:0.5}});
+  else if(style==='cartoon') viewer.setStyle({},{cartoon:{color:'spectrum'}});
+  else if(style==='line') viewer.setStyle({},{line:{linewidth:2}});
+  else if(style==='cross') viewer.setStyle({},{cross:{linewidth:4,radius:0.2}});
+  viewer.render();
+}
+
+function setStyle(style) {
+  currentStyle = style;
+  document.querySelectorAll('.ctrl-btn').forEach(b=>{
+    if(!b.id.startsWith('btn-bg') && b.id!=='btn-spin') b.classList.remove('active');
+  });
+  const el = document.getElementById('btn-'+style);
+  if(el) el.classList.add('active');
+  applyStyle(style);
+}
+
+function setBG(color) {
+  if(!viewer) return;
+  viewer.setBackgroundColor(color);
+  viewer.render();
+  ['black','white','grey'].forEach(c=>{
+    document.getElementById('btn-bg-'+c).classList.toggle('active', c===color);
+  });
+}
+
+function toggleSpin() {
+  spinning = !spinning;
+  document.getElementById('btn-spin').classList.toggle('active', spinning);
+  if(spinning) {
+    spinInterval = setInterval(()=>{ if(viewer){viewer.rotate(1,'y');viewer.render();} },30);
+  } else {
+    clearInterval(spinInterval);
+  }
+}
+
+function selectMol(idx) {
+  currentMol = idx;
+  loadMolecule(idx);
+}
+
+function showInfo(mol) {
+  document.getElementById('mol-title').textContent = mol.name;
+  const chirNote = mol.chirals > 0
+    ? `<div class="info-row"><span class="info-label">Chiral Centers (⬟)</span><span class="info-val" style="color:#534AB7">${mol.chirals}</span></div>`
+    : '';
+  document.getElementById('mol-info').innerHTML = `
+    <div class="prop-section"><h3>Identity</h3>
+      <div class="info-row"><span class="info-label">Molecular Formula</span><span class="info-val">${mol.formula}</span></div>
+      <div class="info-row"><span class="info-label">Category</span><span class="info-val">${mol.cat}</span></div>
+      <div class="info-row"><span class="info-label">IUPAC Name</span><span class="info-val" style="font-size:10px">${mol.iupac}</span></div>
+      <div class="info-row"><span class="info-label">Description</span><span class="info-val">${mol.desc}</span></div>
+    </div>
+    <div class="prop-section"><h3>Physical Properties</h3>
+      <div class="info-row"><span class="info-label">Molecular Weight</span><span class="info-val">${mol.mw} g/mol</span></div>
+      <div class="info-row"><span class="info-label">Boiling Point</span><span class="info-val">${mol.bp}</span></div>
+      <div class="info-row"><span class="info-label">Melting Point</span><span class="info-val">${mol.mp}</span></div>
+      <div class="info-row"><span class="info-label">Density</span><span class="info-val">${mol.density}</span></div>
+    </div>
+    <div class="prop-section"><h3>Structural Properties</h3>
+      ${chirNote}
+      <div class="info-row"><span class="info-label">Ring Count</span><span class="info-val">${mol.rings}</span></div>
+      <div class="info-row"><span class="info-label">H-Bond Donors</span><span class="info-val">${mol.hbond_d}</span></div>
+      <div class="info-row"><span class="info-label">H-Bond Acceptors</span><span class="info-val">${mol.hbond_a}</span></div>
+    </div>
+    <div class="prop-section"><h3>SMILES Notation</h3>
+      <div class="smiles-code">${mol.smiles}</div>
+    </div>
+    <div class="prop-section"><h3>Tags</h3>
+      <div>${mol.tags.map(t=>`<span class="badge" style="${getTagStyle(t)}">${t}</span>`).join('')}</div>
+    </div>`;
+}
+
+window.addEventListener('load',()=>{
+  document.getElementById('total-count').textContent = `${MOLECULES.length} total molecules`;
+  renderCats();
+  renderList();
+  setTimeout(initViewer, 300);
+});
+</script>
+</body>
+</html>
