@@ -31,3 +31,5 @@ This project is a Machine Learning-based molecular analysis system developed usi
 4. Train ML models
 5. Evaluate model performance
 6. Visualize predictions and molecular structures
+
+Note: Interactive py3Dmol visualizations may not render in GitHub preview; please run the notebook locally to view full 3D models.
