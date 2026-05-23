@@ -1,0 +1,45 @@
+Dataset Name: Molecular Dataset for Property Prediction and Drug-likeness Classification
+
+Dataset Description:
+A curated molecular dataset containing 100 chemical compounds represented using SMILES (Simplified Molecular Input Line Entry System) notation. The dataset was designed for machine learning tasks involving molecular property prediction and binary drug-likeness classification.
+
+Input Data:
+- Molecule Name
+- SMILES Notation (textual representation of molecular structure)
+- Molecular Formula
+- Molecular Weight
+- Boiling Point
+- Density
+- Chemical Category Label (Drug / Non-Drug)
+
+Feature Extraction using RDKit:
+Molecular descriptors were generated from SMILES strings using RDKit, including:
+- Molecular Weight (MolWt)
+- LogP (Octanol-Water Partition Coefficient)
+- Topological Polar Surface Area (TPSA)
+- Number of Heavy Atoms
+- Number of Rings
+- Number of Aromatic Rings
+- Hydrogen Bond Donors (HBD)
+- Hydrogen Bond Acceptors (HBA)
+- Rotatable Bonds
+- Fraction Csp3
+- Number of Chiral Centers
+
+Machine Learning Targets:
+1. Regression:
+   - Predict Boiling Point
+   - Predict Density
+   - Predict Molecular Weight
+
+2. Classification:
+   - Predict Drug-likeness (Drug vs Non-Drug)
+
+Preprocessing Steps:
+- SMILES parsing and molecular validation
+- Descriptor extraction
+- Feature scaling and cleaning
+- Train-test split for model development
+
+Total Samples:
+100 molecular compounds
